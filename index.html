@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Find My Job</title>
-    <base href="https://jimmytchern.github.io/FindMyJob/">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-
+        
         * {
             margin: 0;
             padding: 0;
@@ -432,3 +431,413 @@
             box-shadow: 0 20px 60px rgba(255, 87, 51, 0.4);
             animation: matchPop 0.8s ease-out;
         }
+
+        @keyframes matchPop {
+            0% { transform: translate(-50%, -50%) scale(0) rotate(-180deg); }
+            50% { transform: translate(-50%, -50%) scale(1.2) rotate(10deg); }
+            100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+        }
+
+        /* Like/Nope indicators */
+        .swipe-indicator {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%) rotate(-30deg);
+            font-size: 4rem;
+            font-weight: 800;
+            padding: 0.5rem 1.5rem;
+            border-radius: 10px;
+            border: 4px solid;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .like-indicator {
+            right: 20px;
+            color: #27AE60;
+            border-color: #27AE60;
+        }
+
+        .nope-indicator {
+            left: 20px;
+            color: #E74C3C;
+            border-color: #E74C3C;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .job-card {
+                width: 95%;
+            }
+            
+            .action-buttons {
+                gap: 2rem;
+            }
+            
+            .action-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            background: white;
+            padding: 0.8rem;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-item {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-gray);
+            cursor: pointer;
+            padding: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .nav-item.active {
+            color: var(--primary-blue);
+        }
+
+        .nav-item:hover {
+            color: var(--primary-blue);
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- Splash Screen -->
+    <div class="splash-screen" id="splashScreen">
+        <div class="splash-logo">Find My J<span class="location-o">o</span>b</div>
+        <div class="splash-tagline">Swipez vers votre avenir</div>
+    </div>
+
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-logo">Find My Job</div>
+        
+        <button class="login-button login-google" onclick="handleLogin()">
+            <span>G</span>
+            <span>Continuer avec Google</span>
+        </button>
+        
+        <button class="login-button login-email" onclick="handleLogin()">
+            <span>@</span>
+            <span>Continuer avec une adresse e-mail</span>
+        </button>
+        
+        <div class="login-terms">
+            En continuant, vous acceptez nos <a href="#">Conditions d'utilisation</a> 
+            et notre <a href="#">Politique de confidentialité</a>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" style="display: none; height: 100%; flex-direction: column;">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-logo">Find My Job</div>
+            <div class="header-actions">
+                <button class="header-btn">⚙️</button>
+                <button class="header-btn">💬</button>
+            </div>
+        </header>
+
+        <!-- Swipe Container -->
+        <div class="swipe-container" id="swipeContainer">
+            <!-- Job cards will be inserted here -->
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button class="action-btn reject-btn" onclick="swipeCard('left')">✕</button>
+            <button class="action-btn like-btn" onclick="swipeCard('right')">❤️</button>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button class="nav-item active">🏠</button>
+            <button class="nav-item">🔍</button>
+            <button class="nav-item">💼</button>
+            <button class="nav-item">👤</button>
+        </nav>
+    </div>
+
+    <script>
+        // Sample job data
+        const jobs = [
+            {
+                id: 1,
+                title: "Développeur Web Full-Stack",
+                company: "Innovatech",
+                location: "Bordeaux",
+                distance: "12 km",
+                employerRating: 8.2,
+                employeeRating: 7.9,
+                salary: "45k€ - 52k€",
+                netSalary: "2 925€ - 3 380€",
+                evolution: "Élevé",
+                advantages: "Tickets Restaurant, Télétravail partiel",
+                icon: "💻"
+            },
+            {
+                id: 2,
+                title: "Chef de Projet Marketing",
+                company: "Digital Agency",
+                location: "Niort",
+                distance: "5 km",
+                employerRating: 8.5,
+                employeeRating: 8.1,
+                salary: "38k€ - 45k€",
+                netSalary: "2 470€ - 2 925€",
+                evolution: "Moyen",
+                advantages: "RTT, Formation continue",
+                icon: "📈"
+            },
+            {
+                id: 3,
+                title: "Commercial B2B",
+                company: "TechSales Pro",
+                location: "La Rochelle",
+                distance: "45 km",
+                employerRating: 7.8,
+                employeeRating: 7.5,
+                salary: "35k€ - 60k€",
+                netSalary: "2 275€ - 3 900€",
+                evolution: "Très élevé",
+                advantages: "Voiture de fonction, Commission",
+                icon: "💼"
+            }
+        ];
+
+        let currentJobIndex = 0;
+        let currentCard = null;
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let currentY = 0;
+        let isDragging = false;
+
+        // Handle login
+        function handleLogin() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'flex';
+            loadNextCard();
+        }
+
+        // Show login screen after splash
+        setTimeout(() => {
+            document.getElementById('loginScreen').classList.add('active');
+        }, 3000);
+
+        // Create job card HTML
+        function createJobCard(job) {
+            const card = document.createElement('div');
+            card.className = 'job-card';
+            card.innerHTML = `
+                <div class="company-image">${job.icon}</div>
+                <div class="job-info">
+                    <h2 class="job-title">${job.title}</h2>
+                    <div class="company-location">
+                        <span>${job.company}</span>
+                        <span>•</span>
+                        <span>${job.location} (${job.distance})</span>
+                    </div>
+                    
+                    <div class="ratings">
+                        <div class="rating-item">
+                            <div class="rating-label">Note Employeur</div>
+                            <div class="rating-stars">
+                                ${generateStars(job.employerRating)}
+                                <span class="rating-value">${job.employerRating}/10</span>
+                            </div>
+                        </div>
+                        <div class="rating-item">
+                            <div class="rating-label">Note Salariés</div>
+                            <div class="rating-stars">
+                                ${generateStars(job.employeeRating)}
+                                <span class="rating-value">${job.employeeRating}/10</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="job-details">
+                        <div class="detail-item">
+                            <span class="detail-icon">💰</span>
+                            <div class="detail-text">
+                                <div class="detail-label">Salaire</div>
+                                <div class="detail-value">${job.salary} Brut/an</div>
+                                <div class="detail-label">(environ ${job.netSalary} Net/mois)</div>
+                            </div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">📈</span>
+                            <div class="detail-text">
+                                <div class="detail-label">Potentiel d'évolution</div>
+                                <div class="detail-value">${job.evolution}</div>
+                            </div>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">🎫</span>
+                            <div class="detail-text">
+                                <div class="detail-label">Avantages</div>
+                                <div class="detail-value">${job.advantages}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="swipe-indicator like-indicator">LIKE</div>
+                <div class="swipe-indicator nope-indicator">NOPE</div>
+            `;
+            
+            // Add swipe indicators
+            return card;
+        }
+
+        // Generate star rating
+        function generateStars(rating) {
+            let stars = '';
+            const fullStars = Math.floor(rating);
+            const hasHalfStar = rating % 1 !== 0;
+            
+            for (let i = 0; i < fullStars; i++) {
+                stars += '<span class="star">★</span>';
+            }
+            if (hasHalfStar) {
+                stars += '<span class="star">☆</span>';
+            }
+            for (let i = Math.ceil(rating); i < 10; i++) {
+                stars += '<span class="star empty">★</span>';
+            }
+            return stars;
+        }
+
+        // Load next card
+        function loadNextCard() {
+            if (currentJobIndex < jobs.length) {
+                const card = createJobCard(jobs[currentJobIndex]);
+                document.getElementById('swipeContainer').appendChild(card);
+                currentCard = card;
+                currentJobIndex++;
+                setupSwipeListeners(card);
+            } else {
+                // No more jobs
+                document.getElementById('swipeContainer').innerHTML = `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h2 style="color: var(--primary-blue); margin-bottom: 1rem;">Plus d'offres pour le moment !</h2>
+                        <p style="color: var(--text-gray);">Revenez plus tard pour découvrir de nouvelles opportunités</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Setup swipe listeners
+        function setupSwipeListeners(card) {
+            // Mouse events
+            card.addEventListener('mousedown', handleStart);
+            document.addEventListener('mousemove', handleMove);
+            document.addEventListener('mouseup', handleEnd);
+            
+            // Touch events
+            card.addEventListener('touchstart', handleStart);
+            document.addEventListener('touchmove', handleMove);
+            document.addEventListener('touchend', handleEnd);
+        }
+
+        function handleStart(e) {
+            isDragging = true;
+            currentCard.classList.add('dragging');
+            
+            startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        }
+
+        function handleMove(e) {
+            if (!isDragging || !currentCard) return;
+            
+            e.preventDefault();
+            currentX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            currentY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+            
+            const deltaX = currentX - startX;
+            const deltaY = currentY - startY;
+            const rotation = deltaX * 0.1;
+            
+            currentCard.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotation}deg)`;
+            
+            // Update indicators
+            const likeIndicator = currentCard.querySelector('.like-indicator');
+            const nopeIndicator = currentCard.querySelector('.nope-indicator');
+            
+            if (deltaX > 50) {
+                likeIndicator.style.opacity = Math.min(1, deltaX / 150);
+                nopeIndicator.style.opacity = 0;
+            } else if (deltaX < -50) {
+                nopeIndicator.style.opacity = Math.min(1, Math.abs(deltaX) / 150);
+                likeIndicator.style.opacity = 0;
+            } else {
+                likeIndicator.style.opacity = 0;
+                nopeIndicator.style.opacity = 0;
+            }
+        }
+
+        function handleEnd(e) {
+            if (!isDragging || !currentCard) return;
+            
+            isDragging = false;
+            currentCard.classList.remove('dragging');
+            
+            const deltaX = currentX - startX;
+            const threshold = 100;
+            
+            if (Math.abs(deltaX) > threshold) {
+                if (deltaX > 0) {
+                    swipeCard('right');
+                } else {
+                    swipeCard('left');
+                }
+            } else {
+                // Snap back
+                currentCard.style.transform = 'translate(0, 0) rotate(0)';
+                currentCard.querySelector('.like-indicator').style.opacity = 0;
+                currentCard.querySelector('.nope-indicator').style.opacity = 0;
+            }
+        }
+
+        // Swipe card programmatically
+        function swipeCard(direction) {
+            if (!currentCard) return;
+            
+            currentCard.classList.add(`swipe-${direction}`);
+            
+            if (direction === 'right' && Math.random() > 0.5) {
+                // Show match animation
+                showMatch();
+            }
+            
+            setTimeout(() => {
+                currentCard.remove();
+                loadNextCard();
+            }, 300);
+        }
+
+        // Show match animation
+        function showMatch() {
+            const match = document.createElement('div');
+            match.className = 'match-animation';
+            match.textContent = 'MATCH !';
+            document.body.appendChild(match);
+            
+            setTimeout(() => {
+                match.remove();
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
