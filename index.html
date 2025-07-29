@@ -6,7 +6,7 @@
     <title>Find My Job</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-        
+
         * {
             margin: 0;
             padding: 0;
@@ -556,8 +556,8 @@
 
         <!-- Action Buttons -->
         <div class="action-buttons">
-            <button class="action-btn reject-btn" onclick="swipeCard('left')">✕</button>
-            <button class="action-btn like-btn" onclick="swipeCard('right')">❤️</button>
+            <button class="action-btn reject-btn" onclick="swipeCard('left')" aria-label="Rejeter l'offre">✕</button>
+            <button class="action-btn like-btn" onclick="swipeCard('right')" aria-label="Aimer l'offre">❤️</button>
         </div>
 
         <!-- Bottom Navigation -->
@@ -570,52 +570,7 @@
     </div>
 
     <script>
-        // Sample job data
-        const jobs = [
-            {
-                id: 1,
-                title: "Développeur Web Full-Stack",
-                company: "Innovatech",
-                location: "Bordeaux",
-                distance: "12 km",
-                employerRating: 8.2,
-                employeeRating: 7.9,
-                salary: "45k€ - 52k€",
-                netSalary: "2 925€ - 3 380€",
-                evolution: "Élevé",
-                advantages: "Tickets Restaurant, Télétravail partiel",
-                icon: "💻"
-            },
-            {
-                id: 2,
-                title: "Chef de Projet Marketing",
-                company: "Digital Agency",
-                location: "Niort",
-                distance: "5 km",
-                employerRating: 8.5,
-                employeeRating: 8.1,
-                salary: "38k€ - 45k€",
-                netSalary: "2 470€ - 2 925€",
-                evolution: "Moyen",
-                advantages: "RTT, Formation continue",
-                icon: "📈"
-            },
-            {
-                id: 3,
-                title: "Commercial B2B",
-                company: "TechSales Pro",
-                location: "La Rochelle",
-                distance: "45 km",
-                employerRating: 7.8,
-                employeeRating: 7.5,
-                salary: "35k€ - 60k€",
-                netSalary: "2 275€ - 3 900€",
-                evolution: "Très élevé",
-                advantages: "Voiture de fonction, Commission",
-                icon: "💼"
-            }
-        ];
-
+        let jobs = [];
         let currentJobIndex = 0;
         let currentCard = null;
         let startX = 0;
@@ -623,6 +578,135 @@
         let currentX = 0;
         let currentY = 0;
         let isDragging = false;
+        let lastRequestTime = 0;
+        const requestInterval = 150; // ~7 req/s pour l'API Recherche d'entreprises
+
+        // Obtenir le token d'accès pour l'API France Travail
+        async function getAccessToken() {
+            const clientId = 'PAR_findmyjob_50343623077f0a2dd157b725327d9a7813f4be884f5bee206cf4211817c1abda';
+            const clientSecret = 'fc8354ed0f52f59ef40197cfc958354ac86c7119efbd26a3948d40bbaec14c96';
+            const authUrl = 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire';
+
+            try {
+                const response = await fetch(authUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: new URLSearchParams({
+                        grant_type: 'client_credentials',
+                        client_id: clientId,
+                        client_secret: clientSecret,
+                        scope: 'api_offresdemploiv2 o2dsoffre'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erreur d'authentification: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                return data.access_token;
+            } catch (error) {
+                console.error('Erreur lors de l\'obtention du token:', error);
+                return null;
+            }
+        }
+
+        // Récupérer les offres d'emploi depuis l'API France Travail
+        async function fetchJobOffers(token, queryParams = {}) {
+            const baseUrl = 'https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search';
+            const params = new URLSearchParams({
+                lieu: queryParams.lieu || '33000', // Bordeaux par défaut
+                metier: queryParams.metier || 'M1805', // Informatique par défaut
+                sort: queryParams.sort || '0',
+                range: queryParams.range || '0-9',
+                ...queryParams
+            });
+
+            try {
+                const response = await fetch(`${baseUrl}?${params.toString()}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erreur lors de la récupération des offres: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                return data.resultats || [];
+            } catch (error) {
+                console.error('Erreur lors de la récupération des offres:', error);
+                return [];
+            }
+        }
+
+        // Récupérer les informations sur les entreprises
+        async function fetchCompanies(queryParams = {}) {
+            const baseUrl = 'https://recherche-entreprises.api.gouv.fr/search';
+            const params = new URLSearchParams({
+                q: queryParams.q || '',
+                per_page: queryParams.per_page || 10,
+                page: queryParams.page || 1,
+                ...queryParams
+            });
+
+            try {
+                const response = await fetch(`${baseUrl}?${params.toString()}`);
+                if (response.status === 429) throw new Error('Limite de requêtes dépassée');
+                if (!response.ok) throw new Error(`Erreur ${response.status}`);
+                return (await response.json()).results || [];
+            } catch (error) {
+                console.error('Erreur lors de la récupération des entreprises:', error);
+                return [];
+            }
+        }
+
+        // Gérer la limite de requêtes pour l'API Recherche d'entreprises
+        async function fetchCompaniesWithRateLimit(queryParams) {
+            const now = Date.now();
+            if (now - lastRequestTime < requestInterval) {
+                await new Promise(resolve => setTimeout(resolve, requestInterval - (now - lastRequestTime)));
+            }
+            lastRequestTime = Date.now();
+            return fetchCompanies(queryParams);
+        }
+
+        // Combiner les données des deux APIs
+        async function fetchCombinedData(queryParams = {}) {
+            const token = await getAccessToken();
+            if (!token) {
+                console.error('Impossible d\'obtenir le token d\'accès');
+                return [];
+            }
+
+            const jobOffers = await fetchJobOffers(token, queryParams);
+            const enrichedJobs = await Promise.all(
+                jobOffers.map(async (offer) => {
+                    const companyData = await fetchCompaniesWithRateLimit({ q: offer.entreprise?.nom || '' });
+                    const company = companyData[0] || {};
+                    return {
+                        id: offer.id || Date.now(),
+                        title: offer.intitule || 'Poste non spécifié',
+                        company: offer.entreprise?.nom || company.denomination || 'Inconnu',
+                        location: offer.lieuTravail?.libelle || company.siege?.ville || 'N/A',
+                        distance: offer.lieuTravail?.distance ? `${offer.lieuTravail.distance} km` : 'N/A',
+                        employerRating: company.score ? (company.score / 10).toFixed(1) : 8.0,
+                        employeeRating: company.score ? (company.score / 10 - 0.5).toFixed(1) : 7.5,
+                        salary: offer.salaire?.libelle || '35k€ - 50k€',
+                        netSalary: 'N/A', // À calculer si disponible
+                        evolution: offer.typeContrat || 'Moyen',
+                        advantages: company.siege?.activite_principale || offer.description || 'N/A',
+                        icon: '💼'
+                    };
+                })
+            );
+
+            return enrichedJobs;
+        }
 
         // Handle login
         function handleLogin() {
@@ -630,11 +714,6 @@
             document.getElementById('mainApp').style.display = 'flex';
             loadNextCard();
         }
-
-        // Show login screen after splash
-        setTimeout(() => {
-            document.getElementById('loginScreen').classList.add('active');
-        }, 3000);
 
         // Create job card HTML
         function createJobCard(job) {
@@ -695,8 +774,6 @@
                 <div class="swipe-indicator like-indicator">LIKE</div>
                 <div class="swipe-indicator nope-indicator">NOPE</div>
             `;
-            
-            // Add swipe indicators
             return card;
         }
 
@@ -719,34 +796,49 @@
         }
 
         // Load next card
-        function loadNextCard() {
+        async function loadNextCard() {
             if (currentJobIndex < jobs.length) {
-                const card = createJobCard(jobs[currentJobIndex]);
+                const job = jobs[currentJobIndex];
+                if (!job.title || !job.company) {
+                    console.error('Données d\'emploi invalides:', job);
+                    currentJobIndex++;
+                    loadNextCard();
+                    return;
+                }
+                const card = createJobCard(job);
                 document.getElementById('swipeContainer').appendChild(card);
                 currentCard = card;
                 currentJobIndex++;
                 setupSwipeListeners(card);
             } else {
-                // No more jobs
-                document.getElementById('swipeContainer').innerHTML = `
-                    <div style="text-align: center; padding: 2rem;">
-                        <h2 style="color: var(--primary-blue); margin-bottom: 1rem;">Plus d'offres pour le moment !</h2>
-                        <p style="color: var(--text-gray);">Revenez plus tard pour découvrir de nouvelles opportunités</p>
-                    </div>
-                `;
+                const nextPage = Math.floor(currentJobIndex / 10);
+                const queryParams = {
+                    lieu: '33000',
+                    metier: 'M1805',
+                    range: `${nextPage * 10}-${nextPage * 10 + 9}`
+                };
+                const newJobs = await fetchCombinedData(queryParams);
+                if (newJobs.length > 0) {
+                    jobs.push(...newJobs);
+                    loadNextCard();
+                } else {
+                    document.getElementById('swipeContainer').innerHTML = `
+                        <div style="text-align: center; padding: 2rem;">
+                            <h2 style="color: var(--primary-blue); margin-bottom: 1rem;">Plus d'offres pour le moment !</h2>
+                            <p style="color: var(--text-gray);">Revenez plus tard pour découvrir de nouvelles opportunités</p>
+                        </div>
+                    `;
+                }
             }
         }
 
         // Setup swipe listeners
         function setupSwipeListeners(card) {
-            // Mouse events
             card.addEventListener('mousedown', handleStart);
-            document.addEventListener('mousemove', handleMove);
-            document.addEventListener('mouseup', handleEnd);
-            
-            // Touch events
             card.addEventListener('touchstart', handleStart);
+            document.addEventListener('mousemove', handleMove);
             document.addEventListener('touchmove', handleMove);
+            document.addEventListener('mouseup', handleEnd);
             document.addEventListener('touchend', handleEnd);
         }
 
@@ -771,15 +863,15 @@
             
             currentCard.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotation}deg)`;
             
-            // Update indicators
             const likeIndicator = currentCard.querySelector('.like-indicator');
             const nopeIndicator = currentCard.querySelector('.nope-indicator');
+            const threshold = window.innerWidth * 0.15;
             
-            if (deltaX > 50) {
-                likeIndicator.style.opacity = Math.min(1, deltaX / 150);
+            if (deltaX > threshold) {
+                likeIndicator.style.opacity = Math.min(1, deltaX / (threshold * 1.5));
                 nopeIndicator.style.opacity = 0;
-            } else if (deltaX < -50) {
-                nopeIndicator.style.opacity = Math.min(1, Math.abs(deltaX) / 150);
+            } else if (deltaX < -threshold) {
+                nopeIndicator.style.opacity = Math.min(1, Math.abs(deltaX) / (threshold * 1.5));
                 likeIndicator.style.opacity = 0;
             } else {
                 likeIndicator.style.opacity = 0;
@@ -794,7 +886,7 @@
             currentCard.classList.remove('dragging');
             
             const deltaX = currentX - startX;
-            const threshold = 100;
+            const threshold = window.innerWidth * 0.15;
             
             if (Math.abs(deltaX) > threshold) {
                 if (deltaX > 0) {
@@ -803,7 +895,6 @@
                     swipeCard('left');
                 }
             } else {
-                // Snap back
                 currentCard.style.transform = 'translate(0, 0) rotate(0)';
                 currentCard.querySelector('.like-indicator').style.opacity = 0;
                 currentCard.querySelector('.nope-indicator').style.opacity = 0;
@@ -817,7 +908,6 @@
             currentCard.classList.add(`swipe-${direction}`);
             
             if (direction === 'right' && Math.random() > 0.5) {
-                // Show match animation
                 showMatch();
             }
             
@@ -838,6 +928,27 @@
                 match.remove();
             }, 2000);
         }
+
+        // Initialize app
+        async function initApp() {
+            const queryParams = {
+                lieu: '33000', // Bordeaux
+                metier: 'M1805', // Informatique
+                range: '0-9'
+            };
+            jobs = await fetchCombinedData(queryParams);
+            setTimeout(() => {
+                document.getElementById('loginScreen').classList.add('active');
+            }, 3000);
+        }
+
+        initApp();
+
+        // Keyboard navigation for accessibility
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') swipeCard('left');
+            if (e.key === 'ArrowRight') swipeCard('right');
+        });
     </script>
 </body>
 </html>
